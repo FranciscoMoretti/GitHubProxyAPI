@@ -1,0 +1,35 @@
+{
+  "name": "githubproxyapi",
+  "version": "0.1.0",
+  "description": "Keep the official gh CLI. Route eligible GitHub reads through GitHub App installations.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "githubproxyapi": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --import tsx --test test/*.test.ts",
+    "dev": "node --import tsx src/cli.ts",
+    "check": "npm run typecheck && npm test && npm run build"
+  },
+  "dependencies": {
+    "graphql": "^16.11.0",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  }
+}
