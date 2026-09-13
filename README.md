@@ -2,6 +2,9 @@
 
 Keep the official `gh` CLI. Route eligible repository reads across GitHub App installations, while preserving your identity for writes and user-dependent requests.
 
+The short command is `ghpa`. The collision-free `githubproxyapi` command remains
+available as an equivalent alias.
+
 A local TypeScript/Node.js daemon receives HTTP over a private Unix socket. `gh` still owns its commands, options, formatting, pagination, authentication and interactive behavior. No CLI command implementation is copied.
 
 ## What works
@@ -24,10 +27,10 @@ npm ci
 npm run check
 npm link
 
-githubproxyapi init
-githubproxyapi start
-githubproxyapi exec -- gh api user --jq .login
-githubproxyapi status
+ghpa init
+ghpa start
+ghpa exec -- gh api user --jq .login
+ghpa status
 ```
 
 You can use `node dist/cli.js` instead of installing the command with `npm link`. `serve` runs in the foreground; `start` detaches a background process and writes a private log beside the config. It does not register a login service. Run `start` after reboot.
@@ -57,7 +60,7 @@ githubproxyapi apps add --name reader-a \
 # Repeat apps add with a different App installation for another quota.
 githubproxyapi enroll-caller
 githubproxyapi stop
-githubproxyapi start
+ghpa start
 githubproxyapi doctor
 ```
 
@@ -70,7 +73,7 @@ Configuration defaults to `~/.config/githubproxyapi/config.json`; set `GITHUBPRO
 Try scoped execution first:
 
 ```sh
-githubproxyapi exec -- gh api repos/OWNER/REPO/pulls/123/files
+ghpa exec -- gh api repos/OWNER/REPO/pulls/123/files
 ```
 
 The runner copies your gh configuration into a private temporary directory, overlays the socket setting, forwards the arguments and preserves the child exit status. This isolates configuration files, not OS keyring operations: authentication commands can still change shared credentials.
@@ -81,7 +84,7 @@ For persistent use:
 githubproxyapi enable-gh
 gh api repos/OWNER/REPO/pulls/123/files
 gh pr view 123 --repo OWNER/REPO
-githubproxyapi status
+ghpa status
 
 # Restore your previous socket setting before stopping the daemon.
 githubproxyapi disable-gh
@@ -105,7 +108,7 @@ Enabling preserves the previous socket setting and unrelated YAML fields/comment
 GraphQL supports validated aliases, variables, defaults and fragments within a deliberately small schema. It never splits or rewrites operations. A supported scalar query example:
 
 ```sh
-githubproxyapi exec -- gh api graphql \
+ghpa exec -- gh api graphql \
   -f query='query { repository(owner:"OWNER", name:"REPO") { pullRequest(number:123) { number title state additions deletions } } }'
 ```
 
@@ -135,6 +138,7 @@ Tests use generated RSA keys, fake clocks and local upstreams. The `gh` integrat
 
 Architecture: [implementation plan](docs/implementation-plan.md). Evaluation: [upstream assessment](docs/proxy-value-notes.md).
 Live setup evidence: [validation report](docs/live-validation.md).
+Naming decision: [command-name research](docs/name-research.md).
 
 ## Upstream credit
 

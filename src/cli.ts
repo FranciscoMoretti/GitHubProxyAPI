@@ -12,7 +12,7 @@ import { disableGh, enableGh, getStatus, scopedGh, stopProxy } from './control.j
 import { discoverInstallations } from './credentials.js';
 import { startProxy } from './proxy.js';
 import type { AppConfig, Permission } from './types.js';
-const help = `GitHubProxyAPI — keep gh, pool eligible GitHub App reads
+const help = `GHPA (GitHubProxyAPI) — keep gh, pool eligible GitHub App reads
 
   init                         Create a private configuration
   config validate              Check configuration

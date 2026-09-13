@@ -5,6 +5,7 @@
   "type": "module",
   "license": "MIT",
   "bin": {
+    "ghpa": "dist/cli.js",
     "githubproxyapi": "dist/cli.js"
   },
   "files": [

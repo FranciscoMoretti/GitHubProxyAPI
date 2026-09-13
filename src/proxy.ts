@@ -222,7 +222,7 @@ export async function startProxy(config: Config, options: ProxyOptions = {}) {
       }
       if (!reservation && host === 'api.github.com' && path.split('?')[0] !== '/rate_limit') {
         reservation = scheduler.reserve([key], decision.resource);
-        if (!reservation) { send(res, 429, 'No capacity available for this identity. Check githubproxyapi status.', 1); return; }
+        if (!reservation) { send(res, 429, 'No capacity available for this identity. Check ghpa status.', 1); return; }
       }
       if (!authorizedHosts.has(host)) delete outgoing.authorization;
       outgoing['user-agent'] ??= 'GitHubProxyAPI/0.1.0';
@@ -260,7 +260,7 @@ export async function startProxy(config: Config, options: ProxyOptions = {}) {
             key = `personal:${caller}`; route = 'personal'; outgoing.authorization = req.headers.authorization;
             reservation = scheduler.reserve([key], decision.resource);
           }
-          if (!reservation) { send(res, 429, 'All eligible credentials are exhausted. Check githubproxyapi status.', 1); return; }
+          if (!reservation) { send(res, 429, 'All eligible credentials are exhausted. Check ghpa status.', 1); return; }
           if (scheduler.snapshot().cooldownUntil > now()) { send(res, 429, 'GitHub requests are paused by a shared cooldown.', 60); return; }
           body = Readable.from(buffer ? [buffer] : []); reason = 'primary-limit-failover'; continue;
         }
