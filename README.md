@@ -1,9 +1,9 @@
-# GitHubProxyAPI
+# GHPA
 
 Keep the official `gh` CLI. Route eligible repository reads across GitHub App installations, while preserving your identity for writes and user-dependent requests.
 
-The short command is `ghpa`. The collision-free `githubproxyapi` command remains
-available as an equivalent alias.
+The npm package and primary command are `ghpa`. The longer `githubproxyapi`
+command remains available as an equivalent compatibility alias.
 
 A local TypeScript/Node.js daemon receives HTTP over a private Unix socket. `gh` still owns its commands, options, formatting, pagination, authentication and interactive behavior. No CLI command implementation is copied.
 
@@ -33,6 +33,12 @@ ghpa exec -- gh api user --jq .login
 ghpa status
 ```
 
+Or install the published command globally:
+
+```sh
+npm install --global ghpa
+```
+
 You can use `node dist/cli.js` instead of installing the command with `npm link`. `serve` runs in the foreground; `start` detaches a background process and writes a private log beside the config. It does not register a login service. Run `start` after reboot.
 
 With no Apps configured, the proxy is a personal pass-through and quota monitor. No global `gh` settings change until you explicitly run `enable-gh`.
@@ -45,23 +51,23 @@ Keep downloaded private keys outside this repository with file mode `600`. Start
 
 ```sh
 # Discover installation IDs without displaying secrets.
-githubproxyapi apps discover --app-id 12345 --key-file /absolute/path/app.pem
+ghpa apps discover --app-id 12345 --key-file /absolute/path/app.pem
 
 # Obtain the stable repository ID using your normal user identity.
 gh api repos/OWNER/REPO --jq .id
 
 # Replace all example IDs and paths with your values.
-githubproxyapi apps add --name reader-a \
+ghpa apps add --name reader-a \
   --app-id 12345 --installation-id 67890 \
   --key-file /absolute/path/app.pem \
   --repo OWNER/REPO:123456 \
   --permission contents --permission pull_requests --permission issues
 
 # Repeat apps add with a different App installation for another quota.
-githubproxyapi enroll-caller
-githubproxyapi stop
+ghpa enroll-caller
+ghpa stop
 ghpa start
-githubproxyapi doctor
+ghpa doctor
 ```
 
 `enroll-caller` obtains the current `github.com` token using `gh auth token` and stores only its SHA-256 fingerprint. It never prints or stores the token itself. For another token, pipe it to `enroll-caller --token-stdin`. Rotating credentials or switching accounts requires enrollment again before App offloading can resume. Requests with unenrolled credentials remain personal.
@@ -81,14 +87,14 @@ The runner copies your gh configuration into a private temporary directory, over
 For persistent use:
 
 ```sh
-githubproxyapi enable-gh
+ghpa enable-gh
 gh api repos/OWNER/REPO/pulls/123/files
 gh pr view 123 --repo OWNER/REPO
 ghpa status
 
 # Restore your previous socket setting before stopping the daemon.
-githubproxyapi disable-gh
-githubproxyapi stop
+ghpa disable-gh
+ghpa stop
 ```
 
 Enabling preserves the previous socket setting and unrelated YAML fields/comments. Disabling refuses to overwrite a socket setting you changed afterward. If the daemon is unavailable, run `disable-gh`; unchanged `gh` does not automatically bypass a failed socket. Git clone/fetch/push subprocesses and extensions with independent HTTP clients do not use this proxy transport.

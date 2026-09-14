@@ -4,8 +4,8 @@ Checked on 2026-09-13.
 
 ## Decision
 
-Use `ghpa` as the short command and retain `githubproxyapi` as an equivalent,
-collision-free fallback.
+Use `ghpa` as the npm package and primary command. Retain `githubproxyapi` as an
+equivalent, collision-free executable fallback.
 
 ## Findings
 

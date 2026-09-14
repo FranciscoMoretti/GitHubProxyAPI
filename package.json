@@ -1,9 +1,27 @@
 {
-  "name": "githubproxyapi",
+  "name": "ghpa",
   "version": "0.1.0",
   "description": "Keep the official gh CLI. Route eligible GitHub reads through GitHub App installations.",
   "type": "module",
   "license": "MIT",
+  "author": "Francisco Moretti",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FranciscoMoretti/GitHubProxyAPI.git"
+  },
+  "homepage": "https://github.com/FranciscoMoretti/GitHubProxyAPI#readme",
+  "bugs": {
+    "url": "https://github.com/FranciscoMoretti/GitHubProxyAPI/issues"
+  },
+  "keywords": [
+    "github",
+    "github-app",
+    "gh",
+    "cli",
+    "api",
+    "proxy",
+    "rate-limit"
+  ],
   "bin": {
     "ghpa": "dist/cli.js",
     "githubproxyapi": "dist/cli.js"
@@ -22,7 +40,11 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "node --import tsx --test test/*.test.ts",
     "dev": "node --import tsx src/cli.ts",
-    "check": "npm run typecheck && npm test && npm run build"
+    "check": "npm run typecheck && npm test && npm run build",
+    "prepublishOnly": "npm run check"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "graphql": "^16.11.0",
