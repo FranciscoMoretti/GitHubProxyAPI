@@ -32,6 +32,7 @@ ghpa init
 ghpa start
 ghpa exec -- gh api user --jq .login
 ghpa status
+ghpa rate-limit
 ```
 
 Or install the published command globally:
@@ -72,6 +73,16 @@ ghpa doctor
 ```
 
 `enroll-caller` obtains the current `github.com` token using `gh auth token` and stores only its SHA-256 fingerprint. It never prints or stores the token itself. For another token, pipe it to `enroll-caller --token-stdin`. Rotating credentials or switching accounts requires enrollment again before App offloading can resume. Requests with unenrolled credentials remain personal.
+
+GitHub CLI exposes its own quota through the API endpoint `gh api rate_limit`;
+it has no dedicated rate-limit command. `ghpa rate-limit` presents the latest
+rate-limit headers observed for the personal
+`gh` credential and each App installation. It labels the personal route as the
+write identity and every configured App as read-only, including its configured
+permissions. Use `ghpa rate-limit --json` for scripts. `ghpa quotas` is an
+equivalent alias. A quota remains `unknown`
+until that credential has produced a GitHub response in the current or restored
+daemon state.
 
 Configuration defaults to `~/.config/githubproxyapi/config.json`; set `GITHUBPROXYAPI_CONFIG` for another absolute path. Configuration changes take effect on restart. `apps list` and `config validate` inspect configuration without calling GitHub.
 

@@ -112,7 +112,7 @@ export async function startProxy(config: Config, options: ProxyOptions = {}) {
   const access = new Map<string, { expiresAt: number; repositoryId: number }>();
   const quarantine = new Map<string, number>();
   const validating = new Map<string, Promise<boolean>>();
-  const status = () => ({ version: '0.1.0', uptimeSeconds: Math.floor((now() - since) / 1000), socketPath: config.socketPath,
+  const status = () => ({ version: '0.1.1', uptimeSeconds: Math.floor((now() - since) / 1000), socketPath: config.socketPath,
     counts, routes, reasons, apps: config.apps.map(a => ({ name: a.name, installationId: a.installationId, repositories: a.repositories.map(r => r.name) })), scheduler: scheduler.snapshot() });
   let saving: Promise<void> = Promise.resolve();
   const save = () => {
@@ -125,7 +125,7 @@ export async function startProxy(config: Config, options: ProxyOptions = {}) {
   const interval = setInterval(() => { void save().catch(() => {}); }, 5000); interval.unref();
   async function probe(path: string, authorization: string, personalKey: string, signal: AbortSignal): Promise<unknown> {
     if (scheduler.snapshot().cooldownUntil > now()) throw new Error('cooldown');
-    const response = await gatedFetch(targetFor('api.github.com', path), { headers: { authorization, accept: 'application/vnd.github+json', 'x-github-api-version': '2022-11-28', 'user-agent': 'GitHubProxyAPI/0.1.0' }, redirect: 'manual', signal: AbortSignal.any([signal, AbortSignal.timeout(config.requestTimeoutMs)]) });
+    const response = await gatedFetch(targetFor('api.github.com', path), { headers: { authorization, accept: 'application/vnd.github+json', 'x-github-api-version': '2022-11-28', 'user-agent': 'GHPA/0.1.1' }, redirect: 'manual', signal: AbortSignal.any([signal, AbortSignal.timeout(config.requestTimeoutMs)]) });
     counts.validationRequests++;
     const text = await response.text();
     scheduler.observe(personalKey, 'core', response.status, Object.fromEntries(response.headers), text.slice(0, 65536));
@@ -225,7 +225,7 @@ export async function startProxy(config: Config, options: ProxyOptions = {}) {
         if (!reservation) { send(res, 429, 'No capacity available for this identity. Check ghpa status.', 1); return; }
       }
       if (!authorizedHosts.has(host)) delete outgoing.authorization;
-      outgoing['user-agent'] ??= 'GitHubProxyAPI/0.1.0';
+      outgoing['user-agent'] ??= 'GHPA/0.1.1';
       for (let attempt = 0; ; attempt++) {
         routes[route] = (routes[route] ?? 0) + 1; reasons[reason] = (reasons[reason] ?? 0) + 1;
         const result = await upstream(host, path, req.method ?? 'GET', outgoing, body, controller.signal);

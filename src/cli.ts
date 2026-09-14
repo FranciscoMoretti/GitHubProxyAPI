@@ -11,6 +11,7 @@ import { configPath, defaultConfig, loadConfig, saveConfig, validateConfig } fro
 import { disableGh, enableGh, getStatus, scopedGh, stopProxy } from './control.js';
 import { discoverInstallations } from './credentials.js';
 import { startProxy } from './proxy.js';
+import { formatQuotas, quotaRows, withPersonalRateLimit } from './quotas.js';
 import type { AppConfig, Permission } from './types.js';
 const help = `GHPA (GitHubProxyAPI) — keep gh, pool eligible GitHub App reads
 
@@ -26,6 +27,8 @@ const help = `GHPA (GitHubProxyAPI) — keep gh, pool eligible GitHub App reads
   stop                         Stop proxy through its private socket
   serve                        Run local Unix-socket proxy in foreground
   status                       Show proxy health and budgets
+  rate-limit [--json]          Show personal and App quotas with access modes
+  quotas [--json]              Alias for rate-limit
   doctor                       Check config, key files, and daemon
   exec -- gh <arguments>        Run gh with scoped proxy settings
   enable-gh                    Persist proxy socket in gh config
@@ -66,6 +69,17 @@ async function main(args: string[]): Promise<void> {
     else { try { token = (await promisify(execFile)('gh', ['auth', 'token', '--hostname', 'github.com'], { maxBuffer: 16384 })).stdout.trim(); } catch { throw new Error('Could not read gh credential; authenticate gh or use --token-stdin'); } }
     if (!token || /\s/.test(token)) throw new Error('Expected one nonempty token');
     const hash = createHash('sha256').update(token).digest('hex'); if (!config.callerFingerprints.includes(hash)) config.callerFingerprints.push(hash); await saveConfig(config, path); console.log('Caller enrolled. Restart the proxy to apply.'); return;
+  }
+  if (command === 'rate-limit' || command === 'quotas') {
+    if (args.length > 1 || (args.length === 1 && args[0] !== '--json')) throw new Error(`Use ${command} [--json]`);
+    let rows = quotaRows(await getStatus(config.socketPath), config.apps);
+    try {
+      const { stdout } = await promisify(execFile)('gh', ['api', 'rate_limit'], { maxBuffer: 1024 * 1024 });
+      rows = withPersonalRateLimit(rows, JSON.parse(stdout));
+    } catch { /* Retain the last observed personal quotas if the live query fails. */ }
+    if (args[0] === '--json') console.log(JSON.stringify({ generatedAt: new Date().toISOString(), quotas: rows }, null, 2));
+    else console.log(formatQuotas(rows));
+    return;
   }
   if (command === 'exec') { if (args[0] === '--') args.shift(); if (args.shift() !== 'gh') throw new Error('Use exec -- gh <arguments>'); process.exitCode = await scopedGh(config.socketPath, args); return; }
   if (args.length) throw new Error('Unexpected arguments; use --help');

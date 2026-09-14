@@ -33,6 +33,10 @@ test('background daemon starts idempotently and stops through the socket', async
   assert.match((await run('start')).stdout,/Proxy started/); started = true;
   assert.match((await run('start')).stdout,/already running/);
   assert.ok(JSON.parse((await run('status')).stdout));
+  assert.match((await run('rate-limit')).stdout,/CREDENTIAL/);
+  assert.ok(Array.isArray(JSON.parse((await run('rate-limit','--json')).stdout).quotas));
+  assert.match((await run('quotas')).stdout,/CREDENTIAL/);
+  assert.ok(Array.isArray(JSON.parse((await run('quotas','--json')).stdout).quotas));
   const { stat } = await import('node:fs/promises');
   assert.equal((await stat(join(dir,'proxy.log'))).mode & 0o777,0o600);
   assert.match((await run('stop')).stdout,/shutdown requested/);
