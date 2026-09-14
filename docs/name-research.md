@@ -4,8 +4,10 @@ Checked on 2026-09-13.
 
 ## Decision
 
-Use `ghpa` as the npm package and primary command. Retain `githubproxyapi` as an
-equivalent, collision-free executable fallback.
+Use `@franciscomoretti/ghpa` as the public npm package and `ghpa` as its primary
+command. Retain `githubproxyapi` as an equivalent, collision-free executable
+fallback. npm rejected the unscoped `ghpa` package name through its similarity
+protection despite the name being unregistered.
 
 ## Findings
 

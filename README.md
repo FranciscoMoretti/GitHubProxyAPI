@@ -2,8 +2,9 @@
 
 Keep the official `gh` CLI. Route eligible repository reads across GitHub App installations, while preserving your identity for writes and user-dependent requests.
 
-The npm package and primary command are `ghpa`. The longer `githubproxyapi`
-command remains available as an equivalent compatibility alias.
+The npm package is `@franciscomoretti/ghpa` and its primary command is `ghpa`.
+The longer `githubproxyapi` command remains available as an equivalent
+compatibility alias.
 
 A local TypeScript/Node.js daemon receives HTTP over a private Unix socket. `gh` still owns its commands, options, formatting, pagination, authentication and interactive behavior. No CLI command implementation is copied.
 
@@ -36,7 +37,7 @@ ghpa status
 Or install the published command globally:
 
 ```sh
-npm install --global ghpa
+npm install --global @franciscomoretti/ghpa
 ```
 
 You can use `node dist/cli.js` instead of installing the command with `npm link`. `serve` runs in the foreground; `start` detaches a background process and writes a private log beside the config. It does not register a login service. Run `start` after reboot.

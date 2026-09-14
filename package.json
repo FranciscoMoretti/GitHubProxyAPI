@@ -1,5 +1,5 @@
 {
-  "name": "ghpa",
+  "name": "@franciscomoretti/ghpa",
   "version": "0.1.0",
   "description": "Keep the official gh CLI. Route eligible GitHub reads through GitHub App installations.",
   "type": "module",
