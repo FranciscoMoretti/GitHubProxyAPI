@@ -7,6 +7,8 @@
 [![Node.js 22+](https://img.shields.io/badge/Node.js-22%2B-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+![The gh CLI sends API traffic through GHPA, which routes requests between a personal credential and two read-only GitHub Apps according to their available quotas.](assets/ghpa-routing.png)
+
 GHPA is a local proxy that gives eligible GitHub reads access to the independent
 rate-limit budgets of your GitHub Apps. Keep using the official `gh` commands,
 flags, formatting, extensions, and authentication you already know. GHPA changes
