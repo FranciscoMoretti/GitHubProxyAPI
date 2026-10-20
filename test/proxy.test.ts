@@ -4,7 +4,7 @@ import http from 'node:http';
 import { mkdtemp, rm, readFile, writeFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { startProxy } from '../src/proxy.js';
+import { startProxy, type ProxyOptions } from '../src/proxy.js';
 import { fingerprint } from '../src/policy.js';
 import type { Config, AppConfig, TokenProvider } from '../src/types.js';
 
@@ -13,14 +13,14 @@ const auth = 'token enrolled-fixture';
 const app = (id: number): AppConfig => ({ name: `app${id}`, appId: String(id), installationId: id,
   privateKeyPath: '/unused.pem', repositories: [{ name: 'owner/repo', id: 9 }], permissions: { contents: 'read', pull_requests: 'read', issues: 'read' } });
 const tokenProvider: TokenProvider = { async getToken(a) { return { token: a.name, expiresAt: Date.now() + 3600000, repositoryIds: [9], permissions: a.permissions as Record<string,string> }; }, invalidate() {} };
-async function setup(t: any, handler: http.RequestListener, extra: Partial<Config> = {}) {
+async function setup(t: any, handler: http.RequestListener, extra: Partial<Config> = {}, overrides: ProxyOptions = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'gpa-'));
   const server = http.createServer(handler);
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const port = (server.address() as import('node:net').AddressInfo).port;
   const config: Config = { version: 1, socketPath: join(dir, 'p.sock'), statePath: join(dir, 'state.json'),
     maxConcurrency: 4, requestTimeoutMs: 2000, accessTtlMs: 60000, callerFingerprints: [fingerprint(auth)!], apps: [app(1), app(2)], ...extra };
-  const proxy = await startProxy(config, { upstreams: { 'api.github.com': `http://127.0.0.1:${port}`, 'uploads.github.com': `http://127.0.0.1:${port}`, 'objects.githubusercontent.com': `http://127.0.0.1:${port}` }, tokenProvider });
+  const proxy = await startProxy(config, { upstreams: { 'api.github.com': `http://127.0.0.1:${port}`, 'uploads.github.com': `http://127.0.0.1:${port}`, 'objects.githubusercontent.com': `http://127.0.0.1:${port}` }, tokenProvider, ...overrides });
   t.after(async () => { await proxy.close(); server.closeAllConnections(); await new Promise<void>(r => server.close(() => r())); await rm(dir, { recursive: true, force: true }); });
   const request = (path: string, { method = 'GET', authorization = auth, host = 'api.github.com', body = '', headers = {} }: { method?: string; authorization?: string; host?: string; body?: string; headers?: Record<string,string> } = {}) => new Promise<{ status: number; body: string; headers: http.IncomingHttpHeaders }>((resolve, reject) => {
     const req = http.request({ socketPath: config.socketPath, path, method, headers: { host, authorization, ...headers } }, res => {
@@ -109,4 +109,28 @@ test('existing socket is protected and non-socket files are never deleted',async
   const file=join(dir,'keep');await writeFile(file,'important');
   await assert.rejects(startProxy({...config,socketPath:file}),/another file/);
   assert.equal(await readFile(file,'utf8'),'important');
+});
+
+test('unavailable App credentials keep safe reads and writes on the personal identity', async t => {
+  const actors: string[] = [];
+  const { request, proxy } = await setup(t, (req,res) => {
+    if (req.url === '/repos/owner/repo') return reply(res, {id:9});
+    if (req.url === '/repos/owner/repo/contents') return reply(res, []);
+    actors.push(req.headers.authorization!); reply(res, {ok:true});
+  }, {}, { tokenProvider: { async getToken() { throw new Error('key unavailable'); }, invalidate() {} } });
+  assert.equal((await request(`/repos/owner/repo/git/blobs/${sha}`)).status, 200);
+  assert.equal((await request('/repos/owner/repo/issues', {method:'POST', body:'{}'})).status, 200);
+  assert.deepEqual(actors, [auth, auth]);
+  assert.equal(proxy.status().reasons['app-token-unavailable'], 1);
+});
+
+test('cold callers wait for observation but still respect discovered exhaustion', async t => {
+  let forwarded = 0;
+  const { request } = await setup(t, async (_req,res) => {
+    forwarded++; await new Promise(r => setTimeout(r, 50)); reply(res, {ok:true}, 0);
+  }, {apps:[]});
+  const results = await Promise.all(Array.from({length: 5}, () => request('/user')));
+  assert.equal(results.filter(r => r.status === 200).length, 1);
+  assert.equal(results.filter(r => r.status === 429).length, 4);
+  assert.equal(forwarded, 1);
 });

@@ -65,3 +65,13 @@ These are proposed tests, not completed results.
 | Upstream updates | Installed baseline and each proposed `gh` upgrade | Contract suite must pass before widening the supported-version claim. |
 
 Capacity acceptance belongs in the routing tests: identify selected credential and rate bucket in redacted diagnostics; verify distinct installations' budgets with a handful of read requests; simulate exhaustion and secondary throttling locally. Do not exhaust the user's real quota to prove failover.
+
+## Managed availability implementation (2026-10-15)
+
+The everyday integration now uses per-user OS socket activation rather than an
+unsupervised detached process. `enable-gh` stages a runtime snapshot, installs and
+verifies the new service, then atomically changes `gh`; `--manual` retains the
+previous explicit lifecycle. See [managed availability](../managed-availability.md)
+for the transaction model, macOS native launcher, Linux descriptor protocol,
+fixture evidence, limitations and remaining live acceptance. Missing local
+transport must be diagnosed before drawing conclusions about token validity.

@@ -11,6 +11,8 @@ import { configPath, defaultConfig, loadConfig, saveConfig, validateConfig } fro
 import { disableGh, enableGh, getStatus, scopedGh, stopProxy } from './control.js';
 import { discoverInstallations } from './credentials.js';
 import { startProxy } from './proxy.js';
+import { activationFd } from './activation.js';
+import { installedService, ManagedService } from './service.js';
 import { formatQuotas, quotaRows, withPersonalRateLimit } from './quotas.js';
 import type { AppConfig, Permission } from './types.js';
 const help = `GHPA (GitHubProxyAPI) — keep gh, pool eligible GitHub App reads
@@ -31,7 +33,10 @@ const help = `GHPA (GitHubProxyAPI) — keep gh, pool eligible GitHub App reads
   quotas [--json]              Alias for rate-limit
   doctor                       Check config, key files, and daemon
   exec -- gh <arguments>        Run gh with scoped proxy settings
-  enable-gh                    Persist proxy socket in gh config
+  enable-gh                    Install/upgrade verified login service, then route gh
+  enable-gh --manual           Route gh to an already running manual proxy
+  service status               Show OS service and local transport diagnostics
+  service uninstall            Restore gh transport, then remove managed service
   disable-gh                   Restore the previous gh socket setting
 
 Configuration: GITHUBPROXYAPI_CONFIG or ~/.config/githubproxyapi/config.json
@@ -52,7 +57,31 @@ async function main(args: string[]): Promise<void> {
     if (id?.length !== 1 || !/^[1-9][0-9]*$/.test(id[0]!) || !Number.isSafeInteger(Number(id[0])) || key?.length !== 1) throw new Error('Use apps discover --app-id ID --key-file PATH');
     console.log(JSON.stringify(await discoverInstallations(id[0]!, resolve(key[0]!)), null, 2)); return;
   }
+  if (command === 'service') {
+    const service = new ManagedService(path);
+    if (args.join(' ') === 'status') { console.log(JSON.stringify(await service.status(), null, 2)); return; }
+    if (args.join(' ') === 'uninstall') { await service.uninstall(); console.log('Restored gh transport and removed managed service'); return; }
+    throw new Error('Use service status or service uninstall');
+  }
+  if (command === 'enable-gh' && !args.length) {
+    const installed = await new ManagedService(path).enable();
+    console.log(`Enabled managed gh socket: ${installed.socketPath}`); return;
+  }
   const config = await loadConfig(path);
+  if (command === 'managed-serve') {
+    if (args.length || !process.env.GHPA_SOCKET_PATH || !process.env.GHPA_GENERATION) throw new Error('managed-serve must be launched by the installed service');
+    config.socketPath = process.env.GHPA_SOCKET_PATH;
+    const proxy = await startProxy(config, { listenFd: activationFd(), generation: process.env.GHPA_GENERATION });
+    const close = () => { void proxy.close().catch(() => { process.exitCode = 1; }); };
+    process.once('SIGINT', close); process.once('SIGTERM', close); return;
+  }
+  const installed = await installedService(path);
+  if (installed && ['status', 'rate-limit', 'quotas', 'exec', 'doctor'].includes(command)) config.socketPath = installed.socketPath;
+  if (installed && ['start', 'stop'].includes(command)) throw new Error('A managed service owns availability. Use disable-gh for direct access, service uninstall to remove it, or enable-gh to upgrade/repair it.');
+  if (command === 'enable-gh' && args.join(' ') === '--manual') {
+    if (installed) throw new Error('Uninstall the managed service before enabling manual mode');
+    await enableGh(config.socketPath, backupPath); console.log('Enabled manual gh socket; keep the daemon running'); return;
+  }
   if (command === 'config' && args.join(' ') === 'validate') { console.log('Configuration valid'); return; }
   if (command === 'apps' && args[0] === 'add') {
     args.shift();
@@ -104,7 +133,6 @@ async function main(args: string[]): Promise<void> {
   if (command === 'stop') { await stopProxy(config.socketPath); console.log('Proxy shutdown requested'); return; }
   if (command === 'serve') { const proxy = await startProxy(config); console.log(`Listening on ${config.socketPath}`); let closing = false; const close = () => { if (!closing) { closing = true; void proxy.close().catch(() => { process.exitCode = 1; }); } }; process.once('SIGINT', close); process.once('SIGTERM', close); return; }
   if (command === 'status') { console.log(JSON.stringify(await getStatus(config.socketPath), null, 2)); return; }
-  if (command === 'enable-gh') { await enableGh(config.socketPath, backupPath); console.log('Enabled gh proxy socket'); return; }
   if (command === 'doctor') { for (const app of config.apps) { let key; try { key = await stat(app.privateKeyPath); await readFile(app.privateKeyPath); } catch { throw new Error(`Cannot read key for app ${app.name}`); } if (!key.isFile() || (key.mode & 0o077)) throw new Error(`Key for app ${app.name} must be a private file (chmod 600)`); } await getStatus(config.socketPath); console.log(`Healthy: ${config.apps.length} apps, ${config.callerFingerprints.length} enrolled callers`); return; }
   throw new Error('Unknown command; use --help');
 }

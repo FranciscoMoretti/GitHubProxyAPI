@@ -12,6 +12,9 @@ import { classify, fingerprint, type Decision } from './policy.js';
 import { appKey, type Config, type SchedulerLike, type TokenProvider, type Reservation, type AppConfig } from './types.js';
 
 export interface ProxyOptions {
+  /** Listener owned by the OS. Never unlink or chmod its path. */
+  listenFd?: number;
+  generation?: string;
   /** Programmatic test seam only. Production CLI never accepts arbitrary upstreams. */
   upstreams?: Record<string, string>;
   tokenProvider?: TokenProvider;
@@ -88,6 +91,24 @@ export async function startProxy(config: Config, options: ProxyOptions = {}) {
   const now = options.now ?? Date.now;
   const scheduler = options.scheduler ?? new BudgetScheduler({ now });
   const upstreamGate = new Gate(config.maxConcurrency);
+  const budgetWaiters = new Set<() => void>();
+  async function reservePersonal(key: string, resource: string, signal: AbortSignal): Promise<Reservation | undefined> {
+    while (true) {
+      signal.throwIfAborted();
+      const reservation = scheduler.reserve([key], resource);
+      if (reservation) return reservation;
+      const snapshot = scheduler.snapshot();
+      const budget = snapshot.budgets.find(b => b.key === key && b.resource === resource);
+      // Wait only for a cold-budget probe already in flight. Exhaustion and shared
+      // cooldown still reject immediately; no upstream request has been sent here.
+      if (snapshot.cooldownUntil > now() || !budget || budget.remaining !== undefined || !budget.inFlight) return undefined;
+      await new Promise<void>((resolve, reject) => {
+        const done = () => { signal.removeEventListener('abort', abort); budgetWaiters.delete(done); resolve(); };
+        const abort = () => { budgetWaiters.delete(done); reject(new Error('cancelled')); };
+        budgetWaiters.add(done); signal.addEventListener('abort', abort, { once: true });
+      });
+    }
+  }
   const upstreamFor = (host: string): URL => new URL(options.upstreams?.[host] ?? `https://${host}`);
   const targetFor = (host: string, path: string): URL => {
     const target = upstreamFor(host); target.pathname = path.split('?')[0]!; target.search = path.includes('?') ? path.slice(path.indexOf('?')) : ''; return target;
@@ -112,7 +133,7 @@ export async function startProxy(config: Config, options: ProxyOptions = {}) {
   const access = new Map<string, { expiresAt: number; repositoryId: number }>();
   const quarantine = new Map<string, number>();
   const validating = new Map<string, Promise<boolean>>();
-  const status = () => ({ version: '0.1.1', uptimeSeconds: Math.floor((now() - since) / 1000), socketPath: config.socketPath,
+  const status = () => ({ version: '0.2.0', uptimeSeconds: Math.floor((now() - since) / 1000), socketPath: config.socketPath, pid: process.pid, generation: options.generation,
     counts, routes, reasons, apps: config.apps.map(a => ({ name: a.name, installationId: a.installationId, repositories: a.repositories.map(r => r.name) })), scheduler: scheduler.snapshot() });
   let saving: Promise<void> = Promise.resolve();
   const save = () => {
@@ -221,7 +242,7 @@ export async function startProxy(config: Config, options: ProxyOptions = {}) {
         send(res, 429, 'GitHub requests are paused until the shared rate-limit cooldown ends.', Math.max(1, Math.ceil((scheduler.snapshot().cooldownUntil - now()) / 1000))); return;
       }
       if (!reservation && host === 'api.github.com' && path.split('?')[0] !== '/rate_limit') {
-        reservation = scheduler.reserve([key], decision.resource);
+        reservation = await reservePersonal(key, decision.resource, controller.signal);
         if (!reservation) { send(res, 429, 'No capacity available for this identity. Check ghpa status.', 1); return; }
       }
       if (!authorizedHosts.has(host)) delete outgoing.authorization;
@@ -258,7 +279,7 @@ export async function startProxy(config: Config, options: ProxyOptions = {}) {
           }
           if (!selected) {
             key = `personal:${caller}`; route = 'personal'; outgoing.authorization = req.headers.authorization;
-            reservation = scheduler.reserve([key], decision.resource);
+            reservation = await reservePersonal(key, decision.resource, controller.signal);
           }
           if (!reservation) { send(res, 429, 'All eligible credentials are exhausted. Check ghpa status.', 1); return; }
           if (scheduler.snapshot().cooldownUntil > now()) { send(res, 429, 'GitHub requests are paused by a shared cooldown.', 60); return; }
@@ -271,7 +292,7 @@ export async function startProxy(config: Config, options: ProxyOptions = {}) {
     } catch {
       counts.errors++; send(res, controller.signal.aborted ? 504 : 502, controller.signal.aborted ? 'Upstream request timed out or was cancelled.' : 'Upstream request failed.');
     } finally {
-      reservation?.release(); releaseNetwork?.(); clearTimeout(timer); controllers.delete(controller); req.off('aborted', abort); res.off('close', abort);
+      reservation?.release(); for (const wake of [...budgetWaiters]) wake(); releaseNetwork?.(); clearTimeout(timer); controllers.delete(controller); req.off('aborted', abort); res.off('close', abort);
     }
   }
   // Socket support is inspired by bored-engineer/github-api-proxy main.go; implemented with Node HTTP.
@@ -281,7 +302,7 @@ export async function startProxy(config: Config, options: ProxyOptions = {}) {
   if (!directoryInfo.isDirectory() || directoryInfo.isSymbolicLink() || (directoryInfo.mode & 0o077) !== 0 || (process.getuid && directoryInfo.uid !== process.getuid())) {
     clearInterval(interval); throw new Error('Socket parent directory must be owned by you and have mode 0700.');
   }
-  try {
+  if (options.listenFd === undefined) try {
     const existing = await lstat(config.socketPath);
     if (!existing.isSocket() || (process.getuid && existing.uid !== process.getuid())) throw new Error('Socket path is occupied by another file.');
     if (await socketAlive(config.socketPath)) throw new Error('A daemon is already listening on this socket.');
@@ -291,8 +312,8 @@ export async function startProxy(config: Config, options: ProxyOptions = {}) {
   server.on('clientError', (_e, socket) => { socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n'); });
   server.on('upgrade', (_req, socket) => { socket.end('HTTP/1.1 501 Not Implemented\r\nConnection: close\r\n\r\n'); });
   try {
-    await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(config.socketPath, () => { server.off('error', reject); resolve(); }); });
-    await chmod(config.socketPath, 0o600);
+    await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(options.listenFd === undefined ? { path: config.socketPath } : { fd: options.listenFd }, () => { server.off('error', reject); resolve(); }); });
+    if (options.listenFd === undefined) await chmod(config.socketPath, 0o600);
   } catch (e) { clearInterval(interval); server.close(); throw e; }
   function close(): Promise<void> { return closing ??= (async () => {
     clearInterval(interval); for (const controller of controllers) controller.abort();

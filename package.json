@@ -1,6 +1,6 @@
 {
   "name": "@franciscomoretti/ghpa",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Keep the official gh CLI. Route eligible GitHub reads through GitHub App installations.",
   "type": "module",
   "license": "MIT",
@@ -30,7 +30,8 @@
     "dist",
     "README.md",
     "LICENSE",
-    "THIRD_PARTY_NOTICES.md"
+    "THIRD_PARTY_NOTICES.md",
+    "native"
   ],
   "engines": {
     "node": ">=22"
@@ -40,8 +41,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "node --import tsx --test test/*.test.ts",
     "dev": "node --import tsx src/cli.ts",
-    "check": "npm run typecheck && npm test && npm run build",
-    "prepublishOnly": "npm run check"
+    "check": "npm run typecheck && npm test",
+    "prepublishOnly": "npm run check",
+    "pretest": "npm run build"
   },
   "publishConfig": {
     "access": "public"

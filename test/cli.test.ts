@@ -6,10 +6,17 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 const exec = promisify(execFile);
+const fixtureEnv = (dir: string, path: string) => ({
+ PATH: process.env.PATH, HOME: dir, GITHUBPROXYAPI_CONFIG: path,
+ GH_CONFIG_DIR: join(dir, 'gh'), GH_TOKEN: 'fixture-personal-token', GH_HOST: 'github.com',
+ GH_PROMPT_DISABLED: '1', GH_NO_UPDATE_NOTIFIER: '1', GH_NO_EXTENSION_UPDATE_NOTIFIER: '1',
+ XDG_CACHE_HOME: join(dir, 'cache'), XDG_STATE_HOME: join(dir, 'state'), XDG_DATA_HOME: join(dir, 'data'),
+ HTTP_PROXY: 'http://127.0.0.1:1', HTTPS_PROXY: 'http://127.0.0.1:1', ALL_PROXY: 'http://127.0.0.1:1', NO_PROXY: '',
+});
 test('CLI onboarding smoke and actionable offline status', async () => {
  const dir = await mkdtemp(join(tmpdir(),'ghpa-cli-'));
  const path = join(dir,'config.json');
- const run = (...args:string[]) => exec(process.execPath,['--import','tsx',resolve('src/cli.ts'),...args],{env:{...process.env,GITHUBPROXYAPI_CONFIG:path}});
+ const run = (...args:string[]) => exec(process.execPath,['--import','tsx',resolve('src/cli.ts'),...args],{env:fixtureEnv(dir,path)});
  try {
   assert.match((await run('--help')).stdout,/apps discover/);
   assert.match((await run('init')).stdout,/Created/);
@@ -26,7 +33,7 @@ test('CLI onboarding smoke and actionable offline status', async () => {
 test('background daemon starts idempotently and stops through the socket', async () => {
  const dir = await mkdtemp(join(tmpdir(),'ghpa-bg-'));
  const path = join(dir,'config.json');
- const run = (...args:string[]) => exec(process.execPath,['--import','tsx',resolve('src/cli.ts'),...args],{env:{...process.env,GITHUBPROXYAPI_CONFIG:path},timeout:12000});
+ const run = (...args:string[]) => exec(process.execPath,['--import','tsx',resolve('src/cli.ts'),...args],{env:fixtureEnv(dir,path),timeout:12000});
  let started = false;
  try {
   await run('init');
