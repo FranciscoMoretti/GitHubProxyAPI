@@ -134,3 +134,25 @@ test('cold callers wait for observation but still respect discovered exhaustion'
   assert.equal(results.filter(r => r.status === 429).length, 4);
   assert.equal(forwarded, 1);
 });
+
+test('cold callers proceed after capacity headers before the first body finishes', async t => {
+  let firstResponse: http.ServerResponse | undefined;
+  let signalFirst!: () => void;
+  const firstSeen = new Promise<void>(r => { signalFirst = r; });
+  let releaseHeaders!: () => void;
+  const headersAllowed = new Promise<void>(r => { releaseHeaders = r; });
+  const { request } = await setup(t, async (req, res) => {
+    if (req.url === '/first') {
+      firstResponse = res; signalFirst(); await headersAllowed;
+      res.writeHead(200, { 'x-ratelimit-resource': 'core', 'x-ratelimit-remaining': '50', 'x-ratelimit-limit': '5000', 'x-ratelimit-reset': String(Math.floor(Date.now()/1000)+3600) });
+      res.flushHeaders();
+    } else reply(res, {ok:true});
+  }, {apps:[]});
+  const first = request('/first').catch(error => error);
+  await firstSeen;
+  const second = request('/second');
+  await new Promise(r => setTimeout(r, 30));
+  releaseHeaders();
+  try { assert.equal((await second).status, 200); }
+  finally { firstResponse?.end('done'); await first; }
+});

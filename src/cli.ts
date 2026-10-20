@@ -27,6 +27,7 @@ const help = `GHPA (GitHubProxyAPI) — keep gh, pool eligible GitHub App reads
   enroll-caller [--token-stdin] Enroll your gh credential by SHA-256 fingerprint
   start                        Start proxy in the background
   stop                         Stop proxy through its private socket
+  stop --manual                Stop a legacy manual daemon after managed migration
   serve                        Run local Unix-socket proxy in foreground
   status                       Show proxy health and budgets
   rate-limit [--json]          Show personal and App quotas with access modes
@@ -76,6 +77,10 @@ async function main(args: string[]): Promise<void> {
     process.once('SIGINT', close); process.once('SIGTERM', close); return;
   }
   const installed = await installedService(path);
+  if (command === 'stop' && args.join(' ') === '--manual') {
+    if (installed?.socketPath === config.socketPath) throw new Error('Refusing to stop the managed listener as a manual daemon');
+    await stopProxy(config.socketPath); console.log('Manual proxy shutdown requested'); return;
+  }
   if (installed && ['status', 'rate-limit', 'quotas', 'exec', 'doctor'].includes(command)) config.socketPath = installed.socketPath;
   if (installed && ['start', 'stop'].includes(command)) throw new Error('A managed service owns availability. Use disable-gh for direct access, service uninstall to remove it, or enable-gh to upgrade/repair it.');
   if (command === 'enable-gh' && args.join(' ') === '--manual') {

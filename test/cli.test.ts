@@ -58,3 +58,21 @@ test('background daemon starts idempotently and stops through the socket', async
   await rm(dir,{recursive:true,force:true});
  }
 });
+
+test('legacy manual daemon can be stopped while a managed installation exists', async () => {
+ const dir = await mkdtemp(join(tmpdir(),'ghpa-legacy-'));
+ const path = join(dir,'config.json');
+ const run = (...args:string[]) => exec(process.execPath,['--import','tsx',resolve('src/cli.ts'),...args],{env:fixtureEnv(dir,path),timeout:12000});
+ const {mkdir,writeFile} = await import('node:fs/promises');
+ try {
+  await run('init'); await run('start');
+  await mkdir(join(dir,'service'));
+  await writeFile(join(dir,'service/installed.json'),JSON.stringify({socketPath:join(dir,'managed.sock')}));
+  await assert.rejects(run('stop'),/managed service/);
+  assert.match((await run('stop','--manual')).stdout,/shutdown requested/);
+ } finally {
+  await rm(join(dir,'service'),{recursive:true,force:true});
+  await run('stop').catch(()=>{});
+  await rm(dir,{recursive:true,force:true});
+ }
+});

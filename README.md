@@ -333,3 +333,9 @@ references and license notices.
 ## License
 
 [MIT](LICENSE) © 2026 GHPA contributors
+
+### Migrating a running manual daemon
+
+After `ghpa enable-gh` installs the managed service, run `ghpa stop --manual`
+if you previously started a daemon with `ghpa start`. This stops only the legacy
+configured socket; the managed service and current gh transport remain available.

@@ -256,7 +256,10 @@ export async function startProxy(config: Config, options: ProxyOptions = {}) {
           const captured = await peek(response); responseBody = captured.stream; responseBuffer = captured.buffer;
         }
         const inspected = inspectBody(responseBuffer, response.headers['content-encoding']);
-        if (host === 'api.github.com') scheduler.observe(key, decision.resource, response.statusCode ?? 502, response.headers, inspected);
+        if (host === 'api.github.com') {
+          scheduler.observe(key, decision.resource, response.statusCode ?? 502, response.headers, inspected);
+          for (const wake of [...budgetWaiters]) wake();
+        }
         if (selected && [401, 403, 404].includes(response.statusCode ?? 0) && response.headers['x-ratelimit-remaining'] !== '0') {
           if (response.statusCode === 401) tokens.invalidate(selected);
           quarantine.set(appKey(selected), now() + 60000); access.clear();
