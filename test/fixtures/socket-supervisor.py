@@ -31,12 +31,17 @@ try:
         if listener in readable:
             child = os.fork()
             if child == 0:
-                env = dict(os.environ)
-                if sys.platform == 'darwin':
-                    env['GHPA_LAUNCH_FD'] = '3'
-                else:
-                    env.update(LISTEN_FDS='1', LISTEN_PID=str(os.getpid()), LISTEN_FDNAMES='ghpa')
-                os.execve(sys.argv[2], sys.argv[2:], env)
+                try:
+                    env = dict(os.environ)
+                    if sys.platform == 'darwin':
+                        env['GHPA_LAUNCH_FD'] = '3'
+                    else:
+                        env.update(LISTEN_FDS='1', LISTEN_PID=str(os.getpid()), LISTEN_FDNAMES='ghpa')
+                    os.execve(sys.argv[2], sys.argv[2:], env)
+                except BaseException as error:
+                    print('exec failed: ' + str(error), file=sys.stderr, flush=True)
+                finally:
+                    os._exit(127)
             starts += 1
             print('started ' + str(child), flush=True)
 finally:

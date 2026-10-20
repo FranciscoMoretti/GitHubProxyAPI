@@ -215,10 +215,9 @@ export class ManagedService {
       if (previous && previous.ghDirectory !== candidate.ghDirectory) throw new Error('Use the original GH_CONFIG_DIR to upgrade or uninstall this service');
       if (Buffer.byteLength(candidate.socketPath) > 103 || /[\x00-\x1f\x7f]/.test(this.path + directory + home)) throw new Error('Managed paths must contain no control characters and socket path must be at most 103 bytes; use a shorter configuration directory');
       await privateDirectory(directory);
-      try { await (this.options.prepare ?? prepareRuntime)(candidate); }
-      catch (error) { await rm(directory, { recursive: true, force: true }); throw error; }
       await atomic(join(this.root, 'pending.json'), JSON.stringify({ candidate, previous, backupBefore: await optional(this.backup) } satisfies Pending));
       try {
+        await (this.options.prepare ?? prepareRuntime)(candidate);
         await this.driver.install(candidate);
         await (this.options.health ?? healthy)(candidate);
         // The old service remains available until this atomic config update commits.

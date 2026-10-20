@@ -158,3 +158,20 @@ test('activation verification has a bounded deadline and rolls back a wrong daem
   assert.ok(Date.now() - started < 14500);
   assert.equal(await ghSocket(f.gh), '/original.sock');
 });
+
+test('runtime preparation is journaled and failed preparation is cleaned up', async t => {
+  const f = await fixture(t);
+  let candidate: Installation | undefined;
+  const service = new ManagedService(f.path, { ...f.options, prepare: async i => {
+    candidate = i;
+    const pending = JSON.parse(await readFile(join(f.dir, 'service/pending.json'), 'utf8'));
+    assert.equal(pending.candidate.generation, i.generation);
+    await writeFile(join(i.directory, 'partial-runtime'), 'partial');
+    throw new Error('preparation failed');
+  }});
+  await assert.rejects(service.enable(), /preparation failed/);
+  assert.ok(candidate);
+  await assert.rejects(stat(candidate.directory), {code:'ENOENT'});
+  await assert.rejects(stat(join(f.dir, 'service/pending.json')), {code:'ENOENT'});
+  assert.equal(await ghSocket(f.gh), '/original.sock');
+});
