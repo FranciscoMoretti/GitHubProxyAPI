@@ -6,10 +6,17 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 const exec = promisify(execFile);
+const fixtureEnv = (dir: string, path: string) => ({
+ PATH: process.env.PATH, HOME: dir, GITHUBPROXYAPI_CONFIG: path,
+ GH_CONFIG_DIR: join(dir, 'gh'), GH_TOKEN: 'fixture-personal-token', GH_HOST: 'github.com',
+ GH_PROMPT_DISABLED: '1', GH_NO_UPDATE_NOTIFIER: '1', GH_NO_EXTENSION_UPDATE_NOTIFIER: '1',
+ XDG_CACHE_HOME: join(dir, 'cache'), XDG_STATE_HOME: join(dir, 'state'), XDG_DATA_HOME: join(dir, 'data'),
+ HTTP_PROXY: 'http://127.0.0.1:1', HTTPS_PROXY: 'http://127.0.0.1:1', ALL_PROXY: 'http://127.0.0.1:1', NO_PROXY: '',
+});
 test('CLI onboarding smoke and actionable offline status', async () => {
  const dir = await mkdtemp(join(tmpdir(),'ghpa-cli-'));
  const path = join(dir,'config.json');
- const run = (...args:string[]) => exec(process.execPath,['--import','tsx',resolve('src/cli.ts'),...args],{env:{...process.env,GITHUBPROXYAPI_CONFIG:path}});
+ const run = (...args:string[]) => exec(process.execPath,['--import','tsx',resolve('src/cli.ts'),...args],{env:fixtureEnv(dir,path)});
  try {
   assert.match((await run('--help')).stdout,/apps discover/);
   assert.match((await run('init')).stdout,/Created/);
@@ -26,7 +33,7 @@ test('CLI onboarding smoke and actionable offline status', async () => {
 test('background daemon starts idempotently and stops through the socket', async () => {
  const dir = await mkdtemp(join(tmpdir(),'ghpa-bg-'));
  const path = join(dir,'config.json');
- const run = (...args:string[]) => exec(process.execPath,['--import','tsx',resolve('src/cli.ts'),...args],{env:{...process.env,GITHUBPROXYAPI_CONFIG:path},timeout:12000});
+ const run = (...args:string[]) => exec(process.execPath,['--import','tsx',resolve('src/cli.ts'),...args],{env:fixtureEnv(dir,path),timeout:12000});
  let started = false;
  try {
   await run('init');
@@ -48,6 +55,24 @@ test('background daemon starts idempotently and stops through the socket', async
   assert.ok(stopped,'daemon should close its socket'); started = false;
  } finally {
   if (started) await run('stop').catch(()=>{});
+  await rm(dir,{recursive:true,force:true});
+ }
+});
+
+test('legacy manual daemon can be stopped while a managed installation exists', async () => {
+ const dir = await mkdtemp(join(tmpdir(),'ghpa-legacy-'));
+ const path = join(dir,'config.json');
+ const run = (...args:string[]) => exec(process.execPath,['--import','tsx',resolve('src/cli.ts'),...args],{env:fixtureEnv(dir,path),timeout:12000});
+ const {mkdir,writeFile} = await import('node:fs/promises');
+ try {
+  await run('init'); await run('start');
+  await mkdir(join(dir,'service'));
+  await writeFile(join(dir,'service/installed.json'),JSON.stringify({socketPath:join(dir,'managed.sock')}));
+  await assert.rejects(run('stop'),/managed service/);
+  assert.match((await run('stop','--manual')).stdout,/shutdown requested/);
+ } finally {
+  await rm(join(dir,'service'),{recursive:true,force:true});
+  await run('stop').catch(()=>{});
   await rm(dir,{recursive:true,force:true});
  }
 });

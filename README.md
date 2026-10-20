@@ -65,7 +65,10 @@ not on the explicit allowlist, it stays personal.
 ## Quick start
 
 GHPA supports macOS and Linux. It requires Node.js 22 or newer and an
-authenticated [GitHub CLI](https://cli.github.com/).
+authenticated [GitHub CLI](https://cli.github.com/). Managed setup requires a
+macOS GUI login session and Apple Command Line Tools, or a Linux systemd user
+manager. See [managed availability](docs/managed-availability.md) for platform
+requirements and recovery.
 
 ```sh
 npm install --global @franciscomoretti/ghpa
@@ -79,19 +82,22 @@ through that setup. Once an App is configured:
 
 ```sh
 ghpa enroll-caller
-ghpa start
-ghpa doctor
 
-# Try one command through the proxy without changing global gh configuration.
-ghpa exec -- gh api repos/OWNER/REPO/git/trees/FULL_TREE_SHA
-
-# Make the proxy transparent for normal gh use.
+# Install and verify the login service, then make normal gh use transparent.
 ghpa enable-gh
+ghpa doctor
 ghpa rate-limit
 ```
 
 From this point, keep using `gh` normally. Use `ghpa` only to configure and
-inspect the proxy.
+inspect the proxy. The OS owns the private listening socket and starts GHPA
+on demand after login or a crash. Re-run `ghpa enable-gh` after upgrading the
+package or Node to install and verify a new runtime snapshot.
+
+For a temporary trial, use `ghpa start` and `ghpa exec -- gh …`.
+`ghpa enable-gh --manual` retains the old unsupervised integration mode.
+`ghpa disable-gh` restores direct/prior transport while leaving the service
+installed; `ghpa service uninstall` restores transport before removing it.
 
 ## Configure a GitHub App
 
@@ -256,12 +262,15 @@ gain fixtures and identity-equivalence tests.
 | `ghpa apps add …` | Add a scoped App installation |
 | `ghpa apps list` | Show configured Apps without secrets |
 | `ghpa enroll-caller` | Enroll the active `gh` credential by fingerprint |
-| `ghpa start` / `ghpa stop` | Start or stop the local daemon |
+| `ghpa start` / `ghpa stop` | Start or stop a manual daemon |
 | `ghpa doctor` | Validate keys, configuration, caller, and daemon health |
 | `ghpa rate-limit` | Show personal and App budgets and access modes |
 | `ghpa status` | Show raw health, routing, and scheduler data |
 | `ghpa exec -- gh …` | Proxy one `gh` invocation |
-| `ghpa enable-gh` | Persist transparent `gh` integration |
+| `ghpa enable-gh` | Install/upgrade a verified socket-activated login service, then route `gh` |
+| `ghpa enable-gh --manual` | Persist routing to a manually started daemon |
+| `ghpa service status` | Show manager, activation, and local transport diagnostics |
+| `ghpa service uninstall` | Restore `gh` transport, then remove the service |
 | `ghpa disable-gh` | Restore the previous `gh` socket setting |
 
 Configuration lives at `~/.config/githubproxyapi/config.json`. Set
@@ -270,8 +279,12 @@ Configuration lives at `~/.config/githubproxyapi/config.json`. Set
 
 ## Operational boundaries
 
-- GHPA is currently a single-user local daemon. It does not register a login
-  service; run `ghpa start` after reboot.
+- GHPA is a single-user local daemon. Managed mode activates after user login.
+  Linux availability before login/after logout requires administrator-configured
+  lingering; macOS uses the GUI login session. Manual mode still needs `start`.
+- Socket activation restores future connections, not in-flight writes. Broken
+  runtime dependencies, invalid configuration, OS start limits, or manager
+  failures require repair or `disable-gh`. GHPA never replays a whole command.
 - Git clone, fetch, and push subprocesses do not use this API socket. Extensions
   with independent HTTP clients may also bypass it.
 - Windows sockets, GitHub Enterprise/custom API hosts, arbitrary GraphQL
@@ -299,6 +312,7 @@ configuration.
 
 - [Implementation plan](docs/implementation-plan.md)
 - [Live validation](docs/live-validation.md)
+- [Managed availability, recovery and acceptance](docs/managed-availability.md)
 - [Existing-project assessment](docs/proxy-value-notes.md)
 - [Naming research](docs/name-research.md)
 
@@ -319,3 +333,9 @@ references and license notices.
 ## License
 
 [MIT](LICENSE) © 2026 GHPA contributors
+
+### Migrating a running manual daemon
+
+After `ghpa enable-gh` installs the managed service, run `ghpa stop --manual`
+if you previously started a daemon with `ghpa start`. This stops only the legacy
+configured socket; the managed service and current gh transport remain available.
